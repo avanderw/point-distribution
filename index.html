@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Point Distribution Algorithms</title>
+    <link rel="stylesheet" href="app.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            margin-bottom: 2rem;
+        }
+        
+        p {
+            margin: 0;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            padding-top: 15px;
+        }
+
+        select,
+        button,
+        input {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--neutral-3);
+        }
+
+        select {
+            min-width: 200px;
+        }
+
+        button {
+            background-color: var(--primary-3);
+            color: var(--neutral-1);
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--primary-4);
+        }
+
+        #canvas-container {
+            position: relative;
+            margin-top: 20px;
+        }
+
+        code,
+        canvas {
+            image-rendering: pixelated;
+            display: block;
+            margin: 10px auto;
+            border-image: url("/border.png") 8 11 11 8 fill / 8px 11px 11px 8px;
+            border-radius: 5px;
+            padding: 5px;
+            font-family: "Courier New", Courier, monospace;
+        }
+
+        code {
+            padding: 15px 30px;
+        }
+
+        .info {
+            max-width: 800px;
+            text-align: justify;
+            color: var(--neutral-5);
+            background-color: var(--neutral-1);
+            padding: 0 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        #metrics-table th,
+        #metrics-table td {
+            padding: 12px 15px;
+            border: 1px solid var(--neutral-5);
+        }
+
+        #metrics-table th {
+            background-color: var(--neutral-1);
+        }
+
+        #metrics-table tbody tr:nth-child(even) {
+            background-color: var(--neutral-2);
+        }
+
+        #metrics-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        strong {
+            color: var(--primary-4)
+        }
+
+        em {
+            margin-bottom: 2rem;
+        }
+
+        #header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: right;
+            gap: 2rem;
+            font-size: smaller;
+            margin-bottom: 1rem;
+        }
+
+        #header > a > svg {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        #header > a {
+            display: inline-flex;
+            gap: 0.5rem;
+        }
+
+    </style>
+    <script src="rhill-voronoi-core.min.js"></script>
+    <script src="simplex-noise.min.js"></script>
+    <script defer data-domain="avanderw.co.za" src="https://tracking.avanderw.co.za/js/script.js"></script>
+</head>
+
+<body>
+    <div id="header">
+        <a href="https://avanderw.co.za"
+            ><svg><use href="feather-sprite.svg#home" /></svg>Home</a
+        >
+        <a href="https://github.com/avanderw/point-distribution">
+            <svg><use href="feather-sprite.svg#github" /></svg>
+            Source
+        </a>
+        <a href="https://tracking.avanderw.co.za/avanderw.co.za">
+            <svg><use href="feather-sprite.svg#bar-chart-2" /></svg>
+            Analytics
+        </a>
+    </div>
+        
+    <h1>2D Point Distribution Algorithms</h1>
+
+    <div class="info">
+        <div class="controls">
+            <label for="algorithm">Algorithm:</label>
+            <select id="algorithm">
+                <option value="random">Uniformly Random</option>
+                <option value="poisson">Poisson Disk Sampling</option>
+                <option value="voronoi">Centroidal Voronoi</option>
+                <option value="farthest">Farthest Point Sampling</option>
+                <option value="kmeans">K-Means Clustering</option>
+                <option value="simplexNoise">Simplex Noise Displacement</option>
+                <option value="noiseDensity">Simplex Noise Density Control</option>
+                <option value="simplexNoiseMask">Simplex Noise Mask</option>
+                <option value="jittered">Jittered Grid</option>
+                <option value="grid">Perfect Grid</option>
+            </select>
+
+            <label for="num-points">Points:</label>
+            <input type="number" id="num-points" min="10" max="1000" value="256">
+
+            <button id="generate">Generate</button>
+        </div>
+    </div>
+
+    <h3 id="algorithm-title">Uniformly Random</h3>
+    <p id="algorithm-description">
+        This algorithm distributes points randomly across the plane with uniform distribution.
+        Each point's position is independent of other points.
+    </p>
+    <div id="canvas-container">
+        <canvas id="canvas" width="800" height="600"></canvas>
+    </div>
+
+    <em>points: <span id="cap-points">256</span>, dimension: <span id="cap-dimension">800x600</span></em>
+
+    <div id="metrics-container" class="info">
+        <table id="metrics-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody id="metrics-tbody">
+            </tbody>
+        </table>
+    </div>
+
+    <div id="metrics-explanation" style="line-height: 1.6; padding: 10px;">
+        <h2>How to Read the Metrics</h2>
+        <ul style="list-style-type: disc; padding-left: 20px;">
+            <li><strong>Avg Nearest Neighbor Distance:</strong> The average distance between each point and its
+                nearest neighbor. Lower values indicate denser clustering.</li>
+            <li><strong>Voronoi Cell Area Variation:</strong> The standard deviation of the areas of the Voronoi
+                cells. Lower values suggest a more uniform distribution.</li>
+            <li><strong>Grid-Based Density:</strong> The standard deviation of the number of points in each grid
+                cell. Lower values indicate a more uniform density distribution.</li>
+            <li><strong>Clark-Evans Index:</strong> Compares the observed mean nearest neighbor distance to the
+                expected mean nearest neighbor distance in a random distribution. Values less than 1 indicate
+                clustering, values around 1 indicate randomness, and values greater than 1 indicate uniformity.</li>
+            <li><strong>Spatial Autocorrelation (Moran's I):</strong> Measures the degree to which points are
+                clustered or dispersed. Positive values indicate clustering, negative values indicate dispersion,
+                and values around 0 indicate randomness.</li>
+        </ul>
+    </div>
+
+    <script>
+        // Canvas and context setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Control elements
+        const algorithmSelect = document.getElementById('algorithm');
+        const numPointsInput = document.getElementById('num-points');
+        const generateButton = document.getElementById('generate');
+        const algorithmTitle = document.getElementById('algorithm-title');
+        const algorithmDescription = document.getElementById('algorithm-description');
+
+        // State variables
+        let points = [];
+        let currentAlgorithm = 'random';
+        let numPoints = parseInt(numPointsInput.value);
+
+        // Algorithm descriptions
+        const descriptions = {
+            random: "This algorithm distributes points randomly across the plane with uniform distribution. Each point's position is independent of other points.",
+            poisson: "Poisson disk sampling generates random points that are at least a minimum distance apart, creating an even distribution without regular patterns.",
+            voronoi: "Centroidal Voronoi tessellation positions points such that each point is at the centroid of its Voronoi cell, creating an evenly spaced distribution.",
+            farthest: "Farthest Point Sampling iteratively places each new point at the position farthest from all existing points, maximizing coverage.",
+            kmeans: "K-means clustering positions points to minimize the distance between points and cluster centers, creating distinct groupings.",
+            simplexNoise: "This algorithm uses simplex noise to offset the position of points from a regular grid, creating a displacement effect.",
+            noiseDensity: "This algorithm uses Simplex noise to determine the probability of a point being placed. Areas with higher noise values have a higher density of points.",
+            simplexNoiseMask: "This algorithm uses simplex noise to create a mask, placing points only where the noise value is above a certain threshold.",
+            jittered: "Jittered grid starts with a uniform grid and adds a small random offset to each point's position, creating a slightly irregular but still evenly spaced distribution.",
+            grid: "This algorithm distributes points in a perfect grid pattern, with each point evenly spaced from its neighbors.",
+        };
+
+        // Algorithm implementations (placeholders for you to implement)
+        const algorithms = {
+            // Uniformly Random distribution
+            random: function (numPoints, width, height) {
+                const points = [];
+                for (let i = 0; i < numPoints; i++) {
+                    points.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height
+                    });
+                }
+                return points;
+            },
+
+            // Poisson Disk Sampling (implementation)
+            poisson: function (numPoints, width, height) {
+                numPoints = numPoints / 4;
+                const k = 30; // Maximum number of samples before rejection
+                const radius = Math.sqrt((width * height) / (numPoints * Math.PI * 2)); // Minimum distance between points
+                const cellSize = radius / Math.sqrt(2);
+
+                const gridWidth = Math.ceil(width / cellSize);
+                const gridHeight = Math.ceil(height / cellSize);
+                const grid = new Array(gridWidth * gridHeight).fill(null);
+
+                const points = [];
+                const spawnPoints = [];
+
+                function addPoint(point) {
+                    points.push(point);
+                    spawnPoints.push(point);
+                    const gridX = Math.floor(point.x / cellSize);
+                    const gridY = Math.floor(point.y / cellSize);
+                    grid[gridX + gridY * gridWidth] = point;
+                }
+
+                function isValidPoint(point) {
+                    const gridX = Math.floor(point.x / cellSize);
+                    const gridY = Math.floor(point.y / cellSize);
+
+                    const startX = Math.max(gridX - 2, 0);
+                    const endX = Math.min(gridX + 2, gridWidth - 1);
+                    const startY = Math.max(gridY - 2, 0);
+                    const endY = Math.min(gridY + 2, gridHeight - 1);
+
+                    for (let x = startX; x <= endX; x++) {
+                        for (let y = startY; y <= endY; y++) {
+                            const neighbor = grid[x + y * gridWidth];
+                            if (neighbor) {
+                                const dx = neighbor.x - point.x;
+                                const dy = neighbor.y - point.y;
+                                if (dx * dx + dy * dy < radius * radius) {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
+
+                function generateRandomPointAround(point) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = radius * (Math.random() + 1);
+                    return {
+                        x: point.x + Math.cos(angle) * distance,
+                        y: point.y + Math.sin(angle) * distance
+                    };
+                }
+
+                // Start with a random point
+                addPoint({
+                    x: Math.random() * width,
+                    y: Math.random() * height
+                });
+
+                while (spawnPoints.length > 0) {
+                    const spawnIndex = Math.floor(Math.random() * spawnPoints.length);
+                    const spawnPoint = spawnPoints[spawnIndex];
+                    let accepted = false;
+
+                    for (let i = 0; i < k; i++) {
+                        const newPoint = generateRandomPointAround(spawnPoint);
+                        if (newPoint.x >= 0 && newPoint.x < width && newPoint.y >= 0 && newPoint.y < height && isValidPoint(newPoint)) {
+                            addPoint(newPoint);
+                            accepted = true;
+                            break;
+                        }
+                    }
+
+                    if (!accepted) {
+                        spawnPoints.splice(spawnIndex, 1);
+                    }
+                }
+
+                return points;
+            },
+
+            // Centroidal Voronoi (implementation)
+            voronoi: function (numPoints, width, height) {
+                const iterations = 10; // Number of iterations for convergence
+
+                // Generate initial random points
+                let points = algorithms.random(numPoints, width, height);
+
+                for (let iter = 0; iter < iterations; iter++) {
+                    // Compute Voronoi diagram
+                    const voronoi = new Voronoi();
+                    const bbox = { xl: 0, xr: width, yt: 0, yb: height };
+                    const sites = points.map(p => ({ x: p.x, y: p.y }));
+                    const diagram = voronoi.compute(sites, bbox);
+
+                    // Calculate centroids of Voronoi cells
+                    const centroids = diagram.cells.map(cell => {
+                        const vertices = cell.halfedges.map(he => he.getStartpoint());
+                        const centroid = vertices.reduce((acc, v) => {
+                            acc.x += v.x;
+                            acc.y += v.y;
+                            return acc;
+                        }, { x: 0, y: 0 });
+                        centroid.x /= vertices.length;
+                        centroid.y /= vertices.length;
+                        return centroid;
+                    });
+
+                    // Move points to centroids
+                    points = centroids;
+                }
+
+                return points;
+            },
+
+            // Farthest Point Sampling (implementation)
+            farthest: function (numPoints, width, height) {
+                const points = [];
+
+                // Start with a random point
+                points.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height
+                });
+
+                while (points.length < numPoints) {
+                    let farthestPoint = null;
+                    let maxDistance = -1;
+
+                    // Find the farthest point from all existing points
+                    for (let i = 0; i < 1000; i++) { // Sample 1000 random points
+                        const candidate = {
+                            x: Math.random() * width,
+                            y: Math.random() * height
+                        };
+
+                        let minDistance = Infinity;
+                        for (const point of points) {
+                            const dx = candidate.x - point.x;
+                            const dy = candidate.y - point.y;
+                            const distance = dx * dx + dy * dy; // Squared distance
+
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                            }
+                        }
+
+                        if (minDistance > maxDistance) {
+                            maxDistance = minDistance;
+                            farthestPoint = candidate;
+                        }
+                    }
+
+                    // Add the farthest point found
+                    points.push(farthestPoint);
+                }
+
+                return points;
+            },
+
+            // K-Means Clustering (implementation)
+            kmeans: function (numPoints, width, height) {
+                const k = Math.sqrt(numPoints); // Number of clusters
+                const maxIterations = 100; // Maximum number of iterations
+
+                // Generate initial random points
+                let points = algorithms.random(numPoints, width, height);
+
+                // Initialize cluster centers randomly
+                let centers = algorithms.random(Math.floor(k), width, height);
+
+                for (let iter = 0; iter < maxIterations; iter++) {
+                    // Assign points to the nearest cluster center
+                    let clusters = Array.from({ length: Math.floor(k) }, () => []);
+                    points.forEach(point => {
+                        let minDistance = Infinity;
+                        let clusterIndex = 0;
+                        centers.forEach((center, index) => {
+                            const dx = point.x - center.x;
+                            const dy = point.y - center.y;
+                            const distance = dx * dx + dy * dy; // Squared distance
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                clusterIndex = index;
+                            }
+                        });
+                        clusters[clusterIndex].push(point);
+                    });
+
+                    // Recalculate cluster centers
+                    let newCenters = clusters.map(cluster => {
+                        const sum = cluster.reduce((acc, point) => {
+                            acc.x += point.x;
+                            acc.y += point.y;
+                            return acc;
+                        }, { x: 0, y: 0 });
+                        return {
+                            x: sum.x / cluster.length,
+                            y: sum.y / cluster.length
+                        };
+                    });
+
+                    // Check for convergence
+                    let converged = true;
+                    for (let i = 0; i < centers.length; i++) {
+                        if (centers[i].x !== newCenters[i].x || centers[i].y !== newCenters[i].y) {
+                            converged = false;
+                            break;
+                        }
+                    }
+                    if (converged) break;
+
+                    centers = newCenters;
+                }
+
+                return points;
+            },
+            jittered: function (numPoints, width, height) {
+                const points = [];
+                const gridSize = Math.sqrt((width * height) / numPoints);
+                const jitter = gridSize * 0.4; // Jitter amount (40% of grid size)
+
+                for (let x = gridSize / 2; x < width; x += gridSize) {
+                    for (let y = gridSize / 2; y < height; y += gridSize) {
+                        points.push({
+                            x: x + (Math.random() * jitter - jitter / 2),
+                            y: y + (Math.random() * jitter - jitter / 2)
+                        });
+                    }
+                }
+
+                return points;
+            },
+            grid: function (numPoints, width, height) {
+                const points = [];
+                const gridSize = Math.sqrt((width * height) / numPoints);
+
+                for (let x = gridSize / 2; x < width; x += gridSize) {
+                    for (let y = gridSize / 2; y < height; y += gridSize) {
+                        points.push({ x: x, y: y });
+                    }
+                }
+
+                return points;
+            },
+            simplexNoise: function (numPoints, width, height) {
+                const points = [];
+                const gridSize = Math.sqrt((width * height) / numPoints);
+                const simplex = new SimplexNoise();
+                const noiseScale = 0.1; // Adjust this value to control the noise scale
+
+                for (let x = gridSize / 2; x < width; x += gridSize) {
+                    for (let y = gridSize / 2; y < height; y += gridSize) {
+                        const noiseValue = simplex.noise2D(x * noiseScale, y * noiseScale);
+                        points.push({
+                            x: x + noiseValue * gridSize,
+                            y: y + noiseValue * gridSize
+                        });
+                    }
+                }
+
+                return points;
+            },
+            noiseDensity: function (numPoints, width, height) {
+                const points = [];
+                const gridSize = Math.sqrt((width * height) / numPoints);
+                const simplex = new SimplexNoise();
+                const noiseScale = 0.1; // Adjust this value to control the noise scale
+
+                // Generate more candidate points than needed so we can filter based on noise
+                const candidatePoints = [];
+
+                // Create candidate points
+                for (let x = 0; x < width; x += gridSize) {
+                    for (let y = 0; y < height; y += gridSize) {
+                        const actualX = x + Math.random() * gridSize;
+                        const actualY = y + Math.random() * gridSize;
+
+                        // Calculate noise at this point
+                        const noiseValue = simplex.noise2D(x * noiseScale, y * noiseScale);
+
+                        // Scale noise to [0,1] range for probability
+                        const probability = (noiseValue + 1) / 2;
+
+                        candidatePoints.push({
+                            x: actualX,
+                            y: actualY,
+                            probability: probability
+                        });
+                    }
+                }
+
+                // Sort by probability (highest noise value first)
+                candidatePoints.sort((a, b) => b.probability - a.probability);
+
+                // Select approximately numPoints based on probability
+                const totalCells = candidatePoints.length;
+                const targetPointsPerCell = numPoints / totalCells;
+
+                for (const point of candidatePoints) {
+                    // Normalize the probability to make sure we get close to numPoints
+                    // Higher noise values will have higher chance of being selected
+                    if (Math.random() < point.probability * targetPointsPerCell * 2) {
+                        points.push({
+                            x: point.x,
+                            y: point.y
+                        });
+                    }
+
+                    // Optional: Early exit if we have enough points
+                    if (points.length >= numPoints) break;
+                }
+
+                return points;
+            },
+            simplexNoiseMask: function (numPoints, width, height) {
+                const points = [];
+                const simplex = new SimplexNoise();
+                const noiseScale = 0.1; // Controls the noise pattern scale
+
+                // Calculate optimal grid size based on desired point count
+                // Using a slightly finer grid gives us more candidate points to work with
+                const gridSize = Math.sqrt((width * height) / (numPoints * 1.5));
+
+                // Generate candidate points with their noise values
+                const candidates = [];
+                for (let x = 0; x < width; x += gridSize) {
+                    for (let y = 0; y < height; y += gridSize) {
+                        const noiseValue = simplex.noise2D(x * noiseScale, y * noiseScale);
+                        candidates.push({
+                            x: x + Math.random() * gridSize,
+                            y: y + Math.random() * gridSize,
+                            noise: noiseValue
+                        });
+                    }
+                }
+
+                // Sort candidates by noise value (descending)
+                candidates.sort((a, b) => b.noise - a.noise);
+
+                // Select exactly numPoints from the candidates
+                // This ensures we get precisely the number requested
+                for (let i = 0; i < Math.min(numPoints, candidates.length); i++) {
+                    points.push({
+                        x: candidates[i].x,
+                        y: candidates[i].y
+                    });
+                }
+
+                // If we don't have enough candidate points (rare but possible)
+                if (points.length < numPoints) {
+                    console.warn(`Could only generate ${points.length} points out of ${numPoints} requested.`);
+                }
+
+                return points;
+            },
+        };
+
+
+        // Helper function to calculate Euclidean distance
+        function euclideanDistance(point1, point2) {
+            const dx = point1.x - point2.x;
+            const dy = point1.y - point2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Nearest Neighbor Distance Metrics
+        function calculateNearestNeighborDistances(points) {
+            const distances = points.map(point => {
+                let minDistance = Infinity;
+                points.forEach(otherPoint => {
+                    if (point !== otherPoint) {
+                        const distance = euclideanDistance(point, otherPoint);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                        }
+                    }
+                });
+                return minDistance;
+            });
+            return distances;
+        }
+
+        function averageNearestNeighborDistance(points) {
+            const distances = calculateNearestNeighborDistances(points);
+            const sum = distances.reduce((acc, distance) => acc + distance, 0);
+            return sum / distances.length;
+        }
+
+        function nearestNeighborDistanceDistribution(points) {
+            return calculateNearestNeighborDistances(points);
+        }
+
+        // Voronoi Diagram-Based Metrics
+        function voronoiCellAreaVariation(points, width, height) {
+            const voronoi = new Voronoi();
+            const bbox = { xl: 0, xr: width, yt: 0, yb: height };
+            const sites = points.map(p => ({ x: p.x, y: p.y }));
+            const diagram = voronoi.compute(sites, bbox);
+
+            const areas = diagram.cells.map(cell => {
+                const vertices = cell.halfedges.map(he => he.getStartpoint());
+                let area = 0;
+                for (let i = 0; i < vertices.length; i++) {
+                    const j = (i + 1) % vertices.length;
+                    area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
+                }
+                return Math.abs(area / 2);
+            });
+
+            const meanArea = areas.reduce((acc, area) => acc + area, 0) / areas.length;
+            const variance = areas.reduce((acc, area) => acc + Math.pow(area - meanArea, 2), 0) / areas.length;
+            return Math.sqrt(variance); // Standard deviation
+        }
+
+        // Density-Based Metrics
+        function gridBasedDensity(points, width, height, gridSize) {
+            const grid = {};
+            points.forEach(point => {
+                const x = Math.floor(point.x / gridSize);
+                const y = Math.floor(point.y / gridSize);
+                const key = `${x},${y}`;
+                if (!grid[key]) {
+                    grid[key] = 0;
+                }
+                grid[key]++;
+            });
+
+            const densities = Object.values(grid);
+            const meanDensity = densities.reduce((acc, density) => acc + density, 0) / densities.length;
+            const variance = densities.reduce((acc, density) => acc + Math.pow(density - meanDensity, 2), 0) / densities.length;
+            return Math.sqrt(variance); // Standard deviation
+        }
+
+        // Statistical Metrics
+        function standardDeviationOfCoordinates(points) {
+            const meanX = points.reduce((acc, point) => acc + point.x, 0) / points.length;
+            const meanY = points.reduce((acc, point) => acc + point.y, 0) / points.length;
+
+            const varianceX = points.reduce((acc, point) => acc + Math.pow(point.x - meanX, 2), 0) / points.length;
+            const varianceY = points.reduce((acc, point) => acc + Math.pow(point.y - meanY, 2), 0) / points.length;
+
+            return {
+                stdDevX: Math.sqrt(varianceX),
+                stdDevY: Math.sqrt(varianceY)
+            };
+        }
+
+        function spatialAutocorrelation(points) {
+            const n = points.length;
+            const meanX = points.reduce((acc, point) => acc + point.x, 0) / n;
+            const meanY = points.reduce((acc, point) => acc + point.y, 0) / n;
+
+            let numerator = 0;
+            let denominator = 0;
+            let weightSum = 0;
+
+            for (let i = 0; i < n; i++) {
+                const xi = points[i].x - meanX;
+                const yi = points[i].y - meanY;
+                denominator += xi * xi + yi * yi;
+
+                for (let j = 0; j < n; j++) {
+                    if (i !== j) {
+                        const xj = points[j].x - meanX;
+                        const yj = points[j].y - meanY;
+                        const weight = 1 / euclideanDistance(points[i], points[j]);
+                        numerator += weight * (xi * xj + yi * yj);
+                        weightSum += weight;
+                    }
+                }
+            }
+
+            const moransI = (n / weightSum) * (numerator / denominator);
+            return moransI;
+        }
+
+        // Dispersion Metrics
+        function clarkEvansIndex(points, width, height) {
+            const meanNearestNeighborDistance = averageNearestNeighborDistance(points);
+            const density = points.length / (width * height);
+            const expectedMeanDistance = 1 / (2 * Math.sqrt(density));
+            return meanNearestNeighborDistance / expectedMeanDistance;
+        }
+
+        // Function to calculate and display metrics
+        function displayMetrics() {
+            const gridSize = 50;
+            const avgNNDistance = averageNearestNeighborDistance(points).toFixed(3);
+            const voronoiVariation = voronoiCellAreaVariation(points, canvas.width, canvas.height).toFixed(3);
+            const gridDensity = gridBasedDensity(points, canvas.width, canvas.height, gridSize).toFixed(3);
+            const stdDevCoords = standardDeviationOfCoordinates(points);
+            const clarkEvans = clarkEvansIndex(points, canvas.width, canvas.height).toFixed(3);
+            const moransI = spatialAutocorrelation(points).toFixed(3);
+
+            document.getElementById("cap-points").textContent = points.length;
+
+            // Get the metrics table body element
+            const metricsTbody = document.getElementById('metrics-tbody');
+
+            // Clear previous metrics
+            metricsTbody.innerHTML = '';
+
+            // Add new metrics to the table
+            const metrics = [
+                { name: 'Avg Nearest Neighbor Distance', value: avgNNDistance },
+                { name: 'Voronoi Cell Area Variation', value: 'σ=' + voronoiVariation },
+                { name: `Grid-Based ${gridSize}px Density`, value: 'σ=' + gridDensity },
+                { name: 'Clark-Evans Index', value: clarkEvans },
+                { name: 'Spatial Autocorrelation (Moran\'s I)', value: moransI }
+            ];
+
+            metrics.forEach(metric => {
+                const row = document.createElement('tr');
+                const nameCell = document.createElement('td');
+                const valueCell = document.createElement('td');
+                nameCell.textContent = metric.name;
+                valueCell.textContent = metric.value;
+                row.appendChild(nameCell);
+                row.appendChild(valueCell);
+                metricsTbody.appendChild(row);
+            });
+        }
+
+
+        // Draw points on the canvas
+        function drawPoints() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw points
+            ctx.fillStyle = '#c5fb60';
+
+            points.forEach(point => {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Generate points using the selected algorithm
+        function generatePoints() {
+            currentAlgorithm = algorithmSelect.value;
+            numPoints = parseInt(numPointsInput.value);
+
+            // Update description
+            algorithmTitle.textContent = algorithmSelect.options[algorithmSelect.selectedIndex].text;
+            algorithmDescription.textContent = descriptions[currentAlgorithm];
+
+            // Generate points using the selected algorithm
+            points = algorithms[currentAlgorithm](numPoints, canvas.width, canvas.height);
+
+            // Draw the points
+            drawPoints();
+
+            // Display metrics
+            displayMetrics();
+        }
+
+
+        // Event listeners
+        generateButton.addEventListener('click', generatePoints);
+        algorithmSelect.addEventListener('change', generatePoints);
+
+        // Initial generation
+        generatePoints();
+    </script>
+</body>
+
+</html>
